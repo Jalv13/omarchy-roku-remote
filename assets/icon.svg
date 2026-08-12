@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Roku Remote for Omarchy</title>
+  <desc id="description">A minimal remote control with a directional pad and playback controls.</desc>
+  <rect width="512" height="512" rx="112" fill="#171717"/>
+  <rect x="139" y="52" width="234" height="408" rx="92" fill="#242424" stroke="#e8a23a" stroke-width="12"/>
+  <circle cx="256" cy="114" r="25" fill="none" stroke="#f4f4f4" stroke-width="12"/>
+  <path d="M256 78v38" fill="none" stroke="#e8a23a" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="256" cy="226" r="78" fill="#303030" stroke="#f4f4f4" stroke-width="8"/>
+  <circle cx="256" cy="226" r="27" fill="#e8a23a"/>
+  <path d="m256 169-15 20h30zm0 114-15-20h30zm-57-57 20-15v30zm114 0-20-15v30z" fill="#f4f4f4"/>
+  <rect x="177" y="331" width="70" height="48" rx="18" fill="#303030" stroke="#f4f4f4" stroke-width="7"/>
+  <rect x="265" y="331" width="70" height="48" rx="18" fill="#303030" stroke="#f4f4f4" stroke-width="7"/>
+  <path d="m205 345 22 10-22 10z" fill="#e8a23a"/>
+  <path d="M286 345h9v20h-9zm14 0h9v20h-9z" fill="#e8a23a"/>
+  <circle cx="211" cy="415" r="11" fill="#f4f4f4"/>
+  <circle cx="256" cy="415" r="11" fill="#e8a23a"/>
+  <circle cx="301" cy="415" r="11" fill="#f4f4f4"/>
+</svg>

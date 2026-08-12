@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+plugin_id="io.github.jalv13.roku"
+
+if ! command -v omarchy >/dev/null || ! command -v omarchy-shell >/dev/null; then
+  echo "Omarchy Shell is not installed or is not on PATH." >&2
+  exit 1
+fi
+
+if ! systemctl --user is-active --quiet omarchy-shell; then
+  omarchy restart shell
+fi
+
+last_error=""
+for _attempt in {1..20}; do
+  if last_error="$(omarchy-shell shell summon "$plugin_id" '{}' 2>&1)"; then
+    exit 0
+  fi
+  sleep 0.1
+done
+
+echo "Could not open Roku Remote. Ensure $plugin_id is installed and enabled." >&2
+if [[ -n "$last_error" ]]; then
+  echo "$last_error" >&2
+fi
+exit 1

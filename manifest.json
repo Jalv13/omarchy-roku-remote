@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.jalv13.roku",
+  "name": "Roku Remote",
+  "version": "1.5.0",
+  "author": "Jalv13",
+  "license": "MIT",
+  "description": "A native Omarchy remote for Roku TVs and players on the local network.",
+  "kinds": [
+    "panel",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Roku Remote",
+    "description": "Open a local-network remote for Roku TVs and streaming players.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

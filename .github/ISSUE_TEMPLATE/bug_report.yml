@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible Roku Remote problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Roku Remote. Remove private network data from logs before posting.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Roku Remote version
+      placeholder: 1.5.0
+    validations:
+      required: true
+  - type: input
+    id: omarchy-version
+    attributes:
+      label: Omarchy version
+      description: Run `omarchy version`.
+    validations:
+      required: true
+  - type: input
+    id: roku-model
+    attributes:
+      label: Roku model and OS version
+    validations:
+      required: true
+  - type: dropdown
+    id: discovery
+    attributes:
+      label: Connection method
+      options:
+        - Automatic discovery
+        - Manual IP address
+        - Both attempted
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Tell us exactly what happened and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant shell logs
+      description: Paste sanitized output from `journalctl --user -u omarchy-shell -n 100 --no-pager`.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed private network and account information from this report.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true

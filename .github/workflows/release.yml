@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.x"
+      - name: Validate release candidate
+        run: |
+          ./tests/run-tests
+          bash -n open-roku-remote tests/run-tests
+          python3 tests/validate-package.py --release --tag "$GITHUB_REF_NAME"
+      - name: Build source archive
+        run: |
+          mkdir -p dist
+          git archive \
+            --format=tar.gz \
+            --prefix="omarchy-roku-remote-${GITHUB_REF_NAME}/" \
+            --output="dist/omarchy-roku-remote-${GITHUB_REF_NAME}.tar.gz" \
+            "$GITHUB_REF_NAME"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/omarchy-roku-remote-${GITHUB_REF_NAME}.tar.gz" \
+            --verify-tag \
+            --generate-notes \
+            --title "Roku Remote ${GITHUB_REF_NAME}"
