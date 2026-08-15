@@ -19,6 +19,8 @@ Item {
   property bool addingManual: false
   property bool textInputVisible: false
   property bool infoVisible: false
+  property bool shortcutHelpVisible: false
+  property string feedbackKey: ""
   property string manualError: ""
   property string transientMessage: ""
   property bool transientError: false
@@ -28,7 +30,9 @@ Item {
   property string preferredDeviceId: ""
   property var favorites: []
   property bool managingFavorites: false
+  property bool favoriteIconsEnabled: true
   property string favoriteError: ""
+  property string reconnectError: ""
   property double lastDiscoveryAt: 0
 
   readonly property string pluginId: manifest && manifest.id
@@ -40,16 +44,22 @@ Item {
   readonly property bool controlsEnabled: selectedIp !== ""
   readonly property var selectedDevice: deviceForIp(selectedIp)
   readonly property var currentFavorites: favoritesForCurrentDevice()
-  readonly property string connectionState: discovery.running
-    ? "searching"
-    : (!selectedDevice
-      ? "none"
-      : (roku.connected ? "connected" : "offline"))
-  readonly property string connectionMessage: discovery.running
-    ? "Searching…"
-    : (!selectedDevice
-      ? "No Roku found"
-      : (roku.connected ? "Connected" : "Offline"))
+  readonly property string connectionState: discovery.probing && !roku.connected
+    ? "reconnecting"
+    : (roku.connected
+      ? "connected"
+      : (discovery.running
+        ? "searching"
+        : (!selectedDevice ? "none" : "offline")))
+  readonly property string connectionMessage: discovery.probing && !roku.connected
+    ? "Reconnecting…"
+    : (roku.connected
+      ? (discovery.running ? "Connected · refreshing…" : "Connected")
+      : (discovery.running
+        ? (selectedIp ? "Searching for saved Roku…" : "Searching…")
+        : (!selectedDevice
+          ? "No Roku found"
+          : (reconnectError ? "Offline · reconnect failed" : "Offline"))))
 
   function open(payloadJson) {
     root.closingFromHost = false
@@ -60,13 +70,20 @@ Item {
       root.rememberManual(String(payload.ip))
       root.setSelectedIp(String(payload.ip))
     }
-    if (root.devices.length === 0 || Date.now() - root.lastDiscoveryAt > 60000)
-      Qt.callLater(discovery.start)
-    if (root.selectedIp) Qt.callLater(roku.refreshStatus)
+    if (root.stateLoaded) Qt.callLater(root.beginReconnect)
     Qt.callLater(function() {
       scroller.contentY = 0
       keyCatcher.forceActiveFocus()
     })
+  }
+
+  function beginReconnect() {
+    if (root.selectedIp) {
+      root.reconnectError = ""
+      discovery.probe(root.selectedIp, roku.selectedPort)
+    }
+    if (root.devices.length === 0 || Date.now() - root.lastDiscoveryAt > 60000)
+      discovery.start()
   }
 
   function close() {
@@ -76,6 +93,8 @@ Item {
     root.addingManual = false
     root.managingFavorites = false
     root.infoVisible = false
+    root.shortcutHelpVisible = false
+    root.feedbackKey = ""
     root.manualError = ""
     root.favoriteError = ""
     root.closingFromHost = false
@@ -112,8 +131,10 @@ Item {
     var key = root.favoriteDeviceKey()
     var result = []
     if (!key) return result
-    for (var i = 0; i < root.favorites.length; i++)
-      if (String(root.favorites[i].deviceKey || "") === key) result.push(root.favorites[i])
+    for (var i = 0; i < root.favorites.length; i++) {
+      var scope = String(root.favorites[i].deviceKey || "")
+      if (scope === "global" || scope === key) result.push(root.favorites[i])
+    }
     return result
   }
 
@@ -124,12 +145,13 @@ Item {
     return false
   }
 
-  function addFavorite(kind, id, name) {
+  function addFavorite(kind, id, name, deviceOnly) {
     var type = String(kind || "")
     var value = String(id || "").trim()
     var label = String(name || "").trim().slice(0, 48)
-    var deviceKey = root.favoriteDeviceKey()
-    if (!deviceKey) {
+    var currentKey = root.favoriteDeviceKey()
+    var deviceKey = deviceOnly === true ? currentKey : "global"
+    if (!currentKey) {
       root.favoriteError = "Select a Roku first"
       return false
     }
@@ -146,8 +168,12 @@ Item {
     }
     for (var i = 0; i < root.favorites.length; i++) {
       var existing = root.favorites[i]
-      if (existing.deviceKey === deviceKey && existing.kind === type && existing.id === value) {
-        root.favoriteError = label + " is already a favorite"
+      var conflictingScope = existing.deviceKey === "global"
+        || existing.deviceKey === currentKey || deviceKey === "global"
+      if (conflictingScope && existing.kind === type && existing.id === value) {
+        root.favoriteError = existing.deviceKey === "global"
+          ? label + " is already available on every device"
+          : label + " is already a favorite for this device"
         return false
       }
     }
@@ -273,16 +299,49 @@ Item {
     discovery.start()
   }
 
-  function setSelectedIp(ip) {
+  function setSelectedIp(ip, reconnectNow) {
     var value = String(ip || "")
     root.selectedIp = value
     var device = root.deviceForIp(value)
     roku.selectedIp = value
     roku.selectedPort = device && device.port ? Number(device.port) : 8060
     roku.connected = device ? device.online === true : false
+    root.reconnectError = ""
     if (device && device.deviceId) root.preferredDeviceId = String(device.deviceId)
     root.scheduleSave()
     if (root.managingFavorites) Qt.callLater(roku.refreshApps)
+    if (root.opened && roku.connected) Qt.callLater(roku.refreshStatus)
+    else if (root.opened && value && reconnectNow !== false)
+      Qt.callLater(function() { discovery.probe(value, roku.selectedPort) })
+  }
+
+  function mergeProbedDevice(device) {
+    if (!device || String(device.ip || "") !== root.selectedIp) return
+    var next = []
+    var added = false
+    for (var i = 0; i < root.devices.length; i++) {
+      var old = root.devices[i]
+      var sameIp = String(old.ip || "") === String(device.ip || "")
+      var sameId = device.deviceId && old.deviceId
+        && String(old.deviceId) === String(device.deviceId)
+      if (sameIp || sameId) {
+        if (!added) {
+          device.manual = old.manual === true
+          next.push(device)
+          added = true
+        }
+      } else next.push(old)
+    }
+    if (!added) next.unshift(device)
+    root.devices = next
+    roku.selectedPort = Number(device.port || 8060)
+    roku.connected = true
+    root.reconnectError = ""
+    if (device.deviceId) {
+      root.preferredDeviceId = String(device.deviceId)
+      root.migrateFavoritesForDevice(device.ip, device.deviceId)
+    }
+    root.scheduleSave()
     if (root.opened) Qt.callLater(roku.refreshStatus)
   }
 
@@ -318,6 +377,26 @@ Item {
         })
       }
     }
+    // Keep the last-used device visible as offline if discovery cannot see it.
+    // This preserves a direct reconnect target on networks that filter SSDP.
+    var previous = root.deviceForIp(root.selectedIp)
+    if (previous) {
+      var previousFound = false
+      for (var n = 0; n < merged.length; n++) {
+        if (String(merged[n].ip || "") === String(previous.ip || "")
+            || (previous.deviceId && merged[n].deviceId
+              && String(merged[n].deviceId) === String(previous.deviceId))) {
+          previousFound = true
+          break
+        }
+      }
+      if (!previousFound) {
+        var offlineCopy = ({})
+        for (var oldKey in previous) offlineCopy[oldKey] = previous[oldKey]
+        offlineCopy.online = false
+        merged.push(offlineCopy)
+      }
+    }
     root.manualDevices = nextManuals
     root.devices = merged
     root.lastDiscoveryAt = Date.now()
@@ -336,7 +415,7 @@ Item {
       for (var q = 0; q < root.devices.length; q++)
         if (root.devices[q].online === true) { chosen = root.devices[q]; break }
     }
-    root.setSelectedIp(chosen ? String(chosen.ip) : "")
+    root.setSelectedIp(chosen ? String(chosen.ip) : "", false)
     root.scheduleSave()
   }
 
@@ -376,7 +455,7 @@ Item {
         var id = String(favorite && favorite.id || "").trim()
         var deviceKey = String(favorite && favorite.deviceKey || "")
         if (!root.validFavorite(kind, id)) continue
-        if (!/^(device:|ip:).+/.test(deviceKey)) continue
+        if (deviceKey !== "global" && !/^(device:|ip:).+/.test(deviceKey)) continue
         savedFavorites.push({
           deviceKey: deviceKey,
           kind: kind,
@@ -387,11 +466,29 @@ Item {
     }
     root.manualDevices = manuals
     root.favorites = savedFavorites
+    root.favoriteIconsEnabled = !state || state.favoriteIconsEnabled !== false
     root.selectedIp = state && root.isLocalIpv4(state.selectedIp) ? String(state.selectedIp) : ""
     root.preferredDeviceId = state ? String(state.preferredDeviceId || "") : ""
+    var cached = state && state.lastDevice && typeof state.lastDevice === "object"
+      ? state.lastDevice : null
+    if (root.selectedIp) {
+      root.devices = [{
+        ip: root.selectedIp,
+        port: cached && Number(cached.port) ? Number(cached.port) : 8060,
+        name: String(cached && cached.name || "Last used Roku"),
+        model: String(cached && cached.model || "Roku"),
+        deviceId: String(cached && cached.deviceId || root.preferredDeviceId || ""),
+        softwareVersion: String(cached && cached.softwareVersion || ""),
+        isTv: cached && cached.isTv === true,
+        online: false,
+        manual: cached && cached.manual === true
+      }]
+    }
     root.stateLoaded = true
     roku.selectedIp = root.selectedIp
-    if (root.opened) discovery.start()
+    roku.selectedPort = root.devices.length ? Number(root.devices[0].port || 8060) : 8060
+    roku.connected = false
+    if (root.opened) root.beginReconnect()
   }
 
   function scheduleSave() {
@@ -404,12 +501,24 @@ Item {
       root.savePending = true
       return
     }
+    var cached = root.selectedDevice ? {
+      ip: String(root.selectedDevice.ip || ""),
+      port: Number(root.selectedDevice.port || 8060),
+      name: String(root.selectedDevice.name || "Roku"),
+      model: String(root.selectedDevice.model || "Roku"),
+      deviceId: String(root.selectedDevice.deviceId || ""),
+      softwareVersion: String(root.selectedDevice.softwareVersion || ""),
+      isTv: root.selectedDevice.isTv === true,
+      manual: root.selectedDevice.manual === true
+    } : null
     var payload = {
-      version: 2,
+      version: 4,
       selectedIp: root.selectedIp,
       preferredDeviceId: root.preferredDeviceId,
+      lastDevice: cached,
       manualDevices: root.manualDevices,
-      favorites: root.favorites
+      favorites: root.favorites,
+      favoriteIconsEnabled: root.favoriteIconsEnabled
     }
     stateFile.setText(JSON.stringify(payload, null, 2) + "\n")
     root.savePending = false
@@ -421,6 +530,25 @@ Item {
     messageTimer.restart()
   }
 
+  function flashControl(key, held) {
+    root.feedbackKey = String(key || "")
+    if (held === true) feedbackTimer.stop()
+    else feedbackTimer.restart()
+  }
+
+  function sendKeyboardCommand(key) {
+    if (roku.sendKey(key)) root.flashControl(key, false)
+  }
+
+  function beginKeyboardHold(key) {
+    if (roku.holdKey(key, 15000)) root.flashControl(key, true)
+  }
+
+  function endKeyboardHold(key) {
+    roku.releaseHeldKey(key)
+    if (root.feedbackKey === key) root.feedbackKey = ""
+  }
+
   DeviceDiscovery {
     id: discovery
     helperPath: root.helperPath
@@ -430,6 +558,12 @@ Item {
       if (warnings.length && found.length === 0) root.showStatus(String(warnings[0]), true)
     }
     onFailed: function(message) { root.showStatus(message, true) }
+    onProbeFinished: function(device) { root.mergeProbedDevice(device) }
+    onProbeFailed: function(ip, message) {
+      if (ip !== root.selectedIp || roku.connected) return
+      root.reconnectError = String(message || "Roku did not respond")
+      root.markSelectedOnline(false)
+    }
   }
 
   RokuService {
@@ -449,6 +583,12 @@ Item {
     id: messageTimer
     interval: 3500
     onTriggered: root.transientMessage = ""
+  }
+
+  Timer {
+    id: feedbackTimer
+    interval: 170
+    onTriggered: root.feedbackKey = ""
   }
 
   Process {
@@ -546,6 +686,7 @@ Item {
         diagnostic: roku.diagnosticResult,
         diagnosticError: roku.diagnosticError,
         favorites: root.currentFavorites,
+        favoriteIconsEnabled: root.favoriteIconsEnabled,
         devices: root.devices
       })
     }
@@ -592,7 +733,7 @@ Item {
 
       MouseArea { anchors.fill: parent; onClicked: function(mouse) { mouse.accepted = true } }
 
-      FocusScope {
+      Components.KeyboardShortcuts {
         id: keyCatcher
         anchors.fill: parent
         anchors.topMargin: card.contentTopInset
@@ -600,33 +741,15 @@ Item {
         anchors.bottomMargin: card.contentBottomInset
         anchors.leftMargin: card.contentLeftInset
         focus: true
-
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function(event) {
-          if (event.key === Qt.Key_Escape) {
-            root.requestClose(); event.accepted = true; return
-          }
-          if (manualField.activeFocus || literalField.activeFocus
-              || selector.popupOpen || favoritesEditor.popupOpen) return
-          if (event.key === Qt.Key_Up) {
-            roku.sendKey("Up"); event.accepted = true
-          } else if (event.key === Qt.Key_Down) {
-            roku.sendKey("Down"); event.accepted = true
-          } else if (event.key === Qt.Key_Left) {
-            roku.sendKey("Left"); event.accepted = true
-          } else if (event.key === Qt.Key_Right) {
-            roku.sendKey("Right"); event.accepted = true
-          } else if (event.key === Qt.Key_Home) {
-            roku.sendKey("Home"); event.accepted = true
-          } else if (event.key === Qt.Key_Backspace) {
-            roku.sendKey("Back"); event.accepted = true
-          } else if (event.key === Qt.Key_Space && panel.activeFocusItem === keyCatcher) {
-            roku.sendKey("Play"); event.accepted = true
-          } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-              && panel.activeFocusItem === keyCatcher) {
-            roku.sendKey("Select"); event.accepted = true
-          }
-        }
+        blocked: manualField.activeFocus || literalField.activeFocus
+          || selector.popupOpen || favoritesEditor.popupOpen || favoritesEditor.editing
+        controlsEnabled: root.controlsEnabled
+        confirmKeysEnabled: panel.activeFocusItem === keyCatcher
+        onCommandRequested: function(key) { root.sendKeyboardCommand(key) }
+        onHoldRequested: function(key) { root.beginKeyboardHold(key) }
+        onReleaseRequested: function(key) { root.endKeyboardHold(key) }
+        onCloseRequested: root.requestClose()
+        onHelpRequested: root.shortcutHelpVisible = !root.shortcutHelpVisible
 
         Flickable {
           id: scroller
@@ -646,7 +769,7 @@ Item {
               spacing: Style.spacing.md
 
               Text {
-                width: parent.width - closeButton.width - parent.spacing
+                width: parent.width - helpButton.width - closeButton.width - parent.spacing * 2
                 text: "Roku Remote"
                 textFormat: Text.PlainText
                 color: Color.popups.text
@@ -654,6 +777,14 @@ Item {
                 font.pixelSize: Style.font.heading
                 font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Button {
+                id: helpButton
+                text: "?"
+                tooltipText: "Keyboard shortcuts (?)"
+                focusable: true
+                onClicked: root.shortcutHelpVisible = !root.shortcutHelpVisible
               }
 
               Button {
@@ -665,6 +796,44 @@ Item {
               }
             }
 
+            BorderSurface {
+              width: parent.width
+              height: root.shortcutHelpVisible
+                ? shortcutHelp.implicitHeight + Style.spacing.xl * 2 : 0
+              visible: root.shortcutHelpVisible
+              radius: Style.cornerRadius
+              color: Style.normalFillFor(Color.popups.text, Color.accent)
+              borderSpec: Border.controlSpec("normal", Color.popups.text, Color.accent)
+
+              Column {
+                id: shortcutHelp
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Style.spacing.xl
+                spacing: Style.spacing.sm
+
+                Text {
+                  text: "Keyboard shortcuts"
+                  textFormat: Text.PlainText
+                  color: Color.popups.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.subtitle
+                  font.bold: true
+                }
+
+                Text {
+                  width: parent.width
+                  text: "Arrows  Navigate (hold to scroll)\nEnter  OK / Select     Backspace  Back\nH  Home     P  Play / Pause     R  Replay\nI  Info / Options     , / .  Volume down / up\nSpace  Mute / unmute     Escape  Close"
+                  textFormat: Text.PlainText
+                  color: Color.popups.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
+                }
+              }
+            }
+
             Components.DeviceSelector {
               id: selector
               width: parent.width
@@ -673,7 +842,7 @@ Item {
               statusState: root.connectionState
               statusMessage: root.connectionMessage
               searching: discovery.running
-              onSelected: function(ip) { root.setSelectedIp(ip) }
+              onSelected: function(ip) { root.setSelectedIp(ip, true) }
               onRefreshRequested: discovery.start()
               onAddRequested: {
                 root.addingManual = !root.addingManual
@@ -790,7 +959,7 @@ Item {
               text: root.managingFavorites ? "Done" : "Add favorite"
               tooltipText: root.managingFavorites
                 ? "Close the favorite editor"
-                : "Add an app or TV channel"
+                : "Add an installed Roku app"
               bordered: true
               focusable: true
               onClicked: {
@@ -809,12 +978,17 @@ Item {
               appsError: roku.appsError
               favoriteError: root.favoriteError
               controlsEnabled: root.controlsEnabled
+              iconsEnabled: root.favoriteIconsEnabled
               iconBaseUrl: root.controlsEnabled
                 ? "http://" + root.selectedIp + ":" + String(roku.selectedPort) + "/query/icon/"
                 : ""
               onRefreshAppsRequested: roku.refreshApps()
-              onAddRequested: function(kind, id, name) {
-                if (root.addFavorite(kind, id, name)) favoritesEditor.clearForm()
+              onAddRequested: function(kind, id, name, deviceOnly) {
+                if (root.addFavorite(kind, id, name, deviceOnly)) favoritesEditor.clearForm()
+              }
+              onIconsToggled: function(enabled) {
+                root.favoriteIconsEnabled = enabled
+                root.scheduleSave()
               }
             }
 
@@ -849,6 +1023,7 @@ Item {
                 text: "Home"
                 accessibleName: "Home"
                 enabled: root.controlsEnabled
+                keyboardPressed: root.feedbackKey === "Home"
                 onTriggered: roku.sendKey("Home")
               }
             }
@@ -857,6 +1032,7 @@ Item {
               anchors.horizontalCenter: parent.horizontalCenter
               controlsEnabled: root.controlsEnabled
               service: roku
+              highlightedKey: root.feedbackKey
             }
 
             Components.FavoriteButtons {
@@ -864,6 +1040,10 @@ Item {
               favorites: root.currentFavorites
               managing: root.managingFavorites
               controlsEnabled: root.controlsEnabled
+              iconsEnabled: root.favoriteIconsEnabled
+              iconBaseUrl: root.controlsEnabled
+                ? "http://" + root.selectedIp + ":" + String(roku.selectedPort) + "/query/icon/"
+                : ""
               onRemoveRequested: function(favorite) { root.removeFavorite(favorite) }
               onLaunchRequested: function(favorite) { root.launchFavorite(favorite) }
             }
@@ -877,6 +1057,7 @@ Item {
                 iconText: "󰁍"
                 text: "Back"
                 enabled: root.controlsEnabled
+                keyboardPressed: root.feedbackKey === "Back"
                 onTriggered: roku.sendKey("Back")
               }
               Components.RemoteButton {
@@ -885,6 +1066,7 @@ Item {
                 text: "Options"
                 accessibleName: "Info and options"
                 enabled: root.controlsEnabled
+                keyboardPressed: root.feedbackKey === "Info"
                 onTriggered: roku.sendKey("Info")
               }
             }
@@ -928,6 +1110,7 @@ Item {
                 tooltipText: "Play / Pause"
                 selected: true
                 enabled: root.controlsEnabled
+                keyboardPressed: root.feedbackKey === "Play"
                 onTriggered: roku.sendKey("Play")
               }
               Components.RemoteButton {
@@ -944,6 +1127,7 @@ Item {
                 accessibleName: "Instant replay"
                 tooltipText: "Instant Replay"
                 enabled: root.controlsEnabled
+                keyboardPressed: root.feedbackKey === "InstantReplay"
                 onTriggered: roku.sendKey("InstantReplay")
               }
             }
@@ -970,6 +1154,7 @@ Item {
                   accessibleName: "Volume down"
                   tooltipText: "Roku TV only"
                   enabled: root.controlsEnabled
+                  keyboardPressed: root.feedbackKey === "VolumeDown"
                   onTriggered: roku.sendKey("VolumeDown")
                 }
                 Components.RemoteButton {
@@ -979,6 +1164,7 @@ Item {
                   accessibleName: "Mute"
                   tooltipText: "Roku TV only"
                   enabled: root.controlsEnabled
+                  keyboardPressed: root.feedbackKey === "VolumeMute"
                   onTriggered: roku.sendKey("VolumeMute")
                 }
                 Components.RemoteButton {
@@ -988,6 +1174,7 @@ Item {
                   accessibleName: "Volume up"
                   tooltipText: "Roku TV only"
                   enabled: root.controlsEnabled
+                  keyboardPressed: root.feedbackKey === "VolumeUp"
                   onTriggered: roku.sendKey("VolumeUp")
                 }
               }
@@ -1121,7 +1308,7 @@ Item {
 
             Text {
               width: parent.width
-              text: "Keyboard: arrows · Enter · Space · Backspace · Escape closes"
+              text: "Press ? for keyboard shortcuts"
               textFormat: Text.PlainText
               color: Color.muted
               font.family: Style.font.family

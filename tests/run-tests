@@ -5,3 +5,16 @@ export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
 python3 tests/validate-package.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+if command -v qmltestrunner >/dev/null; then
+  env -u DISPLAY -u WAYLAND_DISPLAY \
+    QT_QPA_PLATFORM=offscreen \
+    QT_QPA_PLATFORMTHEME= \
+    QT_QUICK_BACKEND=software \
+    QT_STYLE_OVERRIDE=Fusion \
+    QT_LOGGING_TO_CONSOLE=1 \
+    QT_FORCE_STDERR_LOGGING=1 \
+    qmltestrunner -input tests/qml -o -,txt
+else
+  echo "qmltestrunner not installed; skipping QML shortcut tests" >&2
+fi

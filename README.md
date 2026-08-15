@@ -17,14 +17,17 @@ server.
   bounded local-subnet `8060` fallback when multicast replies are filtered
 - Manual private IPv4 addresses when multicast discovery is unavailable
 - Multiple-device selector with friendly names from `/query/device-info`
+- Immediate direct reconnect to the last-used Roku while broader discovery runs
 - Home, Back, Info/Options, full navigation, playback, replay, power, volume,
   and mute where the Roku supports them
 - Mouse/touch long-press for directional buttons through ECP `keydown` and
   `keyup`, with an automatic safety release
 - Focused-panel keyboard control and optional Roku literal text input
-- Per-device favorite apps and TV channels with one-click ECP launch buttons;
-  installed apps are offered automatically when Roku permits `/query/apps`,
-  with Roku-provided icon previews and a manual app-ID fallback
+- Per-device favorite apps and TV channels in one visual tile grid; installed
+  apps use Roku-provided artwork, channels use numbered TV tiles, and new app
+  favorites come from a single queried installed-app dropdown. New favorites
+  are shared across Rokus by default, with an optional **This device only** box;
+  a global **Icons** preference shows or hides artwork for all app favorites
 - On-demand media and active-TV-channel details; no background polling
 - URL-encoded app deep links plus opt-in developer diagnostics through IPC or
   the dependency-free helper
@@ -165,11 +168,19 @@ Panel keyboard mappings:
 | Enter | Select / OK |
 | Backspace | Back |
 | Home | Home |
-| Space | Play / Pause |
+| `.` (period) | Volume up |
+| `,` (comma) | Volume down |
+| Space | Mute / unmute |
+| H | Home |
+| P | Play / Pause |
+| R | Instant Replay |
+| I | Info / Options |
+| ? | Show / hide shortcut help |
 | Escape | Close panel |
 
-Directional buttons support holding. A safety timer always schedules `keyup`
-even if the pointer release is lost.
+Directional buttons support holding with either the pointer or keyboard. A
+safety timer always schedules `keyup` even if the release event is lost. Roku
+buttons briefly highlight when their keyboard shortcut is used.
 
 ## Manual IP configuration
 

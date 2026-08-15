@@ -17,12 +17,12 @@ Row {
     anchors.verticalCenter: parent.verticalCenter
     color: root.state === "connected"
       ? Color.accent
-      : root.state === "offline"
+      : (root.state === "offline" || root.state === "error")
         ? Color.urgent
         : Color.muted
 
     SequentialAnimation on opacity {
-      running: root.state === "searching"
+      running: root.state === "searching" || root.state === "reconnecting"
       loops: Animation.Infinite
       NumberAnimation { to: 0.35; duration: 500 }
       NumberAnimation { to: 1; duration: 500 }
@@ -32,7 +32,8 @@ Row {
   Text {
     text: root.message
     textFormat: Text.PlainText
-    color: root.state === "offline" ? Color.urgent : root.foreground
+    color: (root.state === "offline" || root.state === "error")
+      ? Color.urgent : root.foreground
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
     anchors.verticalCenter: parent.verticalCenter
