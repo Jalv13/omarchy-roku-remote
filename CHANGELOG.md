@@ -2,6 +2,18 @@
 
 ## 1.5.0 (unreleased)
 
+- Map the focused panel's keyboard controls more naturally: Enter selects,
+  Backspace goes back, period/comma adjust volume, and Space toggles mute.
+- Add H/P/R/I shortcuts, held-arrow navigation, matching button feedback, an
+  in-panel shortcut guide, and automated QML keyboard-event coverage.
+- Reconnect directly to the last-used Roku before full discovery completes and
+  distinguish reconnecting, refreshing, connected, and offline states.
+- Replace the app/channel favorite mode buttons with one queried installed-app
+  dropdown and Add button, then render favorites as artwork-based visual tiles.
+- Make new favorites available across devices by default, add an unchecked
+  **This device only** option, and reduce favorite-tile artwork size.
+- Explain device-only scope in a tooltip and add a persisted global **Icons**
+  option that updates artwork for all existing app favorites immediately.
 - Remove the misleading Search control: ECP can open Roku's voice interface,
   but it cannot carry microphone audio from the computer.
 - Reject HTTP redirects, unsafe XML declarations, invalid ports, public route

@@ -72,7 +72,7 @@ Column {
 
     Button {
       iconText: "󰑐"
-      text: root.searching ? "Searching…" : "Refresh"
+      text: root.searching ? "Refreshing…" : "Refresh"
       enabled: !root.searching
       focusable: true
       bordered: true

@@ -6,6 +6,7 @@ Item {
 
   required property QtObject service
   property bool controlsEnabled: false
+  property string highlightedKey: ""
 
   implicitWidth: Style.space(210)
   implicitHeight: implicitWidth
@@ -33,11 +34,13 @@ Item {
     accessibleName: "Up"
     tooltipText: "Hold for continuous Up"
     enabled: root.controlsEnabled
+    keyboardPressed: root.highlightedKey === "Up"
     onControlPressed: root.begin("Up")
     onControlReleased: root.end("Up")
   }
 
   RemoteButton {
+    id: leftButton
     width: Style.space(54)
     height: Style.space(70)
     anchors.left: parent.left
@@ -48,11 +51,13 @@ Item {
     accessibleName: "Left"
     tooltipText: "Hold for continuous Left"
     enabled: root.controlsEnabled
+    keyboardPressed: root.highlightedKey === "Left"
     onControlPressed: root.begin("Left")
     onControlReleased: root.end("Left")
   }
 
   RemoteButton {
+    id: rightButton
     width: Style.space(78)
     height: width
     anchors.centerIn: parent
@@ -61,6 +66,7 @@ Item {
     selected: true
     accessibleName: "Select"
     enabled: root.controlsEnabled
+    keyboardPressed: root.highlightedKey === "Select"
     onTriggered: root.service.sendKey("Select")
   }
 
@@ -75,11 +81,13 @@ Item {
     accessibleName: "Right"
     tooltipText: "Hold for continuous Right"
     enabled: root.controlsEnabled
+    keyboardPressed: root.highlightedKey === "Right"
     onControlPressed: root.begin("Right")
     onControlReleased: root.end("Right")
   }
 
   RemoteButton {
+    id: downButton
     width: Style.space(70)
     height: Style.space(54)
     anchors.bottom: parent.bottom
@@ -90,6 +98,7 @@ Item {
     accessibleName: "Down"
     tooltipText: "Hold for continuous Down"
     enabled: root.controlsEnabled
+    keyboardPressed: root.highlightedKey === "Down"
     onControlPressed: root.begin("Down")
     onControlReleased: root.end("Down")
   }

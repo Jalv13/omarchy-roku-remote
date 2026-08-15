@@ -15,6 +15,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.x"
+      - name: Install QML test runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y qml-module-qtquick2 qml-module-qttest qtdeclarative5-dev-tools
       - name: Validate package and run tests
         run: ./tests/run-tests
       - name: Check shell syntax

@@ -11,11 +11,15 @@ Column {
   property string favoriteError: ""
   property bool controlsEnabled: false
   property string iconBaseUrl: ""
+  property bool deviceOnly: false
+  property bool iconsEnabled: true
   property color foreground: Color.popups.text
   readonly property bool popupOpen: appSearch.popupOpen
+  readonly property bool editing: appSearch.activeFocus
 
   signal refreshAppsRequested()
-  signal addRequested(string kind, string id, string name)
+  signal addRequested(string kind, string id, string name, bool deviceOnly)
+  signal iconsToggled(bool enabled)
 
   spacing: 0
 
@@ -36,20 +40,23 @@ Column {
     return result
   }
 
-  function selectApp(appId) {
-    var value = String(appId || "")
-    for (var i = 0; i < root.apps.length; i++) {
-      if (String(root.apps[i].id || "") !== value) continue
-      favoriteName.text = String(root.apps[i].name || "")
-      favoriteTarget.text = value
-      return
-    }
+  function selectedApp() {
+    for (var i = 0; i < root.apps.length; i++)
+      if (String(root.apps[i].id || "") === String(appSearch.value || ""))
+        return root.apps[i]
+    return null
+  }
+
+  function addSelectedApp() {
+    var app = root.selectedApp()
+    if (!app) return
+    root.addRequested(
+      "app", String(app.id || ""), String(app.name || "Roku app"), root.deviceOnly)
   }
 
   function clearForm() {
     appSearch.value = ""
-    favoriteName.text = ""
-    favoriteTarget.text = ""
+    root.deviceOnly = false
   }
 
   BorderSurface {
@@ -73,7 +80,7 @@ Column {
 
         Text {
           width: parent.width - refreshApps.width - parent.spacing
-          text: "Add favorite"
+          text: "Add favorite app"
           textFormat: Text.PlainText
           color: root.foreground
           font.family: Style.font.family
@@ -92,80 +99,60 @@ Column {
         }
       }
 
-      SearchableDropdown {
-        id: appSearch
-        visible: root.apps.length > 0
+      CheckRow {
         width: parent.width
-        value: ""
-        options: root.appOptions
-        showLabel: false
+        label: "This device only"
+        tooltipText: "When checked, this favorite appears only on the selected Roku. Leave unchecked to show it on every device."
+        checked: root.deviceOnly
         foreground: root.foreground
-        placeholderText: "Search installed apps…"
-        emptyText: "No matching apps"
-        onChanged: function(value) { root.selectApp(value) }
+        onToggled: function(checked) { root.deviceOnly = checked }
+      }
+
+      CheckRow {
+        width: parent.width
+        label: "Icons"
+        tooltipText: "Show Roku app artwork for all current favorites on every device."
+        checked: root.iconsEnabled
+        foreground: root.foreground
+        onToggled: function(checked) { root.iconsToggled(checked) }
+      }
+
+      Row {
+        width: parent.width
+        spacing: Style.spacing.md
+
+        SearchableDropdown {
+          id: appSearch
+          width: parent.width - addAppButton.width - parent.spacing
+          value: ""
+          options: root.appOptions
+          showLabel: false
+          foreground: root.foreground
+          enabled: !root.appsLoading && root.controlsEnabled
+          placeholderText: root.appsLoading ? "Loading installed apps…" : "Choose an installed app…"
+          emptyText: root.appsError ? "Installed apps unavailable" : "No matching apps"
+        }
+
+        Button {
+          id: addAppButton
+          text: "Add"
+          iconText: "+"
+          bordered: true
+          focusable: true
+          enabled: root.controlsEnabled && appSearch.value !== ""
+          onClicked: root.addSelectedApp()
+        }
       }
 
       Text {
-        visible: root.appsLoading || (root.appsError !== "" && root.apps.length === 0)
+        visible: !root.appsLoading && root.appsError !== "" && root.apps.length === 0
         width: parent.width
-        text: root.appsLoading
-          ? "Loading installed apps…"
-          : "Can't load installed apps. Enter an app ID manually."
+        text: "Couldn't load installed apps. Check the Roku connection, then refresh."
         textFormat: Text.PlainText
-        color: Color.muted
+        color: Color.urgent
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         wrapMode: Text.WordWrap
-      }
-
-      Row {
-        width: parent.width
-        spacing: Style.spacing.md
-
-        Image {
-          width: appSearch.value && root.iconBaseUrl ? Style.spacing.controlHeight : 0
-          height: Style.spacing.controlHeight
-          visible: width > 0
-          source: visible ? root.iconBaseUrl + encodeURIComponent(appSearch.value) : ""
-          fillMode: Image.PreserveAspectFit
-          asynchronous: true
-          cache: true
-        }
-
-        TextField {
-          id: favoriteName
-          width: (parent.width - favoriteTarget.width
-            - (appSearch.value && root.iconBaseUrl ? Style.spacing.controlHeight + parent.spacing * 2 : parent.spacing))
-          placeholderText: "Name, e.g. YouTube"
-          maximumLength: 48
-        }
-
-        TextField {
-          id: favoriteTarget
-          width: (parent.width - parent.spacing) * 0.38
-          placeholderText: "App ID or 5.1"
-          maximumLength: 128
-        }
-      }
-
-      Row {
-        spacing: Style.spacing.md
-
-        Button {
-          text: "App"
-          iconText: "󰀻"
-          bordered: true
-          focusable: true
-          onClicked: root.addRequested("app", favoriteTarget.text, favoriteName.text)
-        }
-
-        Button {
-          text: "TV channel"
-          iconText: "󰑈"
-          bordered: true
-          focusable: true
-          onClicked: root.addRequested("channel", favoriteTarget.text, favoriteName.text)
-        }
       }
 
       Text {
